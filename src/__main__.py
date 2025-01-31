@@ -1,119 +1,77 @@
-# Udfordringer:
-# - Regnarket indholder 4 faneblade: ét til fælles fag, ét til programmering, ét
-#   til infrastruktur og ét til IT-supporter.
-# - Arket indeholder (af én eller anden grund) fag med kategorier som Grundfag
-#   og htx. Disse vil vi gerne filtrere væk.
-# - Nogle fag findes flere gange. Bla. én gang for hvert niveau (2-4). Vi ønsker
-#   blot at kigge på højeste niveau, som vi finde for hvert fag.
-# - Nogle fag findes endda flere gang med samme niveau, men med forskellige
-#   Resultatformer. Vi ønsker at finde den med resultatformen "-/STA/7TRIN".
-# - Målepindene står i ét felt, formateret med linie skift.
+import sys
 
 import pandas as pd
-import re
+from pandas import DataFrame
+
+import nltk
+from nltk.corpus import stopwords
+nltk.download('stopwords')
+
+def sanitize_string(s: str) -> str:
+    """
+    Remove Danish stopwords from a given string.
+
+    Args:
+        s (str): The input string to sanitize.
+
+    Returns:
+        str: The sanitized string.
+    """
+    all_words = s.split()
+    bad_words = stopwords.words("danish")
+
+    # return [x for x in all_words if ]
+    return ""
 
 EXCEL_FILE = "data/Fagtabel_Excel_2024.xlsx"
-df = pd.read_excel(EXCEL_FILE, sheet_name="Datatekniker med speciale i pro")
 
-def get_stopwords() -> set:
-    with open("data/stopwords.txt", "r") as file:
-        stopwords = { line.strip().lower() for line in file.readlines() }
+def get_measurement_points(df: DataFrame, subject_number: int = None) -> list[str]:
+    """
+    Returns a list of measurement points for a given subject number.
+    
+    Args:
+        df (DataFrame): The data frame to operate on.
+        subject_number (int): The subject number to look up, if any.
+        
+    Returns:
+        list[str]: A list of measurement points for the subject.
+    """
+    try:
+        # Skip the header row and set proper column names.
+        df.columns = df.iloc[0]
+        df = df.iloc[1:].reset_index(drop=True)
 
-    return stopwords
+        # Convert to numeric, coercing errors to NaN.
+        df["NUMMER"] = pd.to_numeric(df["NUMMER"], errors="coerce")
+        df["NIVEAU"] = pd.to_numeric(df["NIVEAU"], errors="coerce")
 
-stopwords = get_stopwords()
+        df = df[~df["FAGKATEGORI"].isin(["Grundfag", "htx"])]
+        df = df.sort_values("NIVEAU", ascending=False)
 
-def get_milestone(fagnr: int) -> list[str]:
-    fagnr = str(fagnr)
+        # Filter for the specific result form.
+        df = df[df["RESULTATFORM"] == "-/STA/7TRIN"]
 
-    for _, row in df.iterrows():
-        if str(row.iloc[0]).strip() == fagnr:
-            text = row.iloc[2]
-            if isinstance(text, str):
-                result = re.split(r'(?=\dd+\.\s)', text)
-                return result
+        subject_row = df[df["NUMMER"]:]
+        if subject_row.empty:
+            return []
 
-    print(f"No row found for NUMMER {fagnr}")
+        # Get measurement points and split them into a list.
+        measurement_points = str(subject_row["MÅLPINDE"].iloc[0])
+        measurement_points = [point.strip() for point in measurement_points.split("\n") if point.strip()]
 
-    return []
+        return measurement_points
 
-def get_milestone_no_nummer(fagnr: int) -> list[str]:
-    fagnr = str(fagnr)
+    except Exception as e:
+        print(f"Error: An unexpected error occurred: {e}", file=sys.stderr)
 
-    for _, row in df.iterrows():
-        if str(row.iloc[0]).strip() == fagnr:
-            text = row.iloc[2]
-            if isinstance(text, str):
-                result = re.split(r'(?=\dd+\.\s)', text)
-                result = [re.sub(r'^\dd+\.\s', '', part) for part in result]
-                return result
+        return []
 
-    print(f"No row found for NUMMER {fagnr}")
-    return []
+if __name__ == "__main__":
+    SANITIZED = sanitize_string("Jeg kan godt lide ost og kage.")
+    print(SANITIZED)
 
-def get_milestone_stopwords(fagnr: int) -> list[str]:
-    fagnr = str(fagnr)
+    df = pd.read_excel(EXCEL_FILE)
 
-    for _, row in df.iterrows():
-        if str(row.iloc[0]).strip() == fagnr:
-            text = row.iloc[2]
-            if isinstance(text, str):
-                result = re.split(r'(?=\dd+\.\s)', text)
-
-                filtered_result = [
-                    ' '.join([word for word in part.split() if word.strip().lower() not in stopwords]).strip()
-                    for part in result
-                ]
-
-                return [part for part in filtered_result if part]
-
-    print(f"No row found for NUMMER {fagnr}")
-
-    return []
-
-
-def select_milestone() -> None:
-    print("List of all Nummer and Titles:")
-    for _, row in df.iterrows():
-        nummer = row.iloc[0]
-        title = row.iloc[1]
-        print(f"{nummer} | {title}")
-
-    selected_fagnr = int(input("\nNummer: "))
-
-    result = get_milestone(selected_fagnr)
-
-    if result:
-        print(f"\nResults for fagnr {selected_fagnr}:")
-        for m in result:
-            print(m)
-
-
-def all_milestones_nummer() -> None:
-    for _, row in df.iterrows():
-        nummer = str(row.iloc[0]).strip()
-
-        if nummer.isnumeric():
-            print(f"\nResults for fagnr {nummer}:")
-            result = get_milestone(nummer)
-
-            if result:
-                for m in result:
-                    print(m)
-            else:
-                print(f"No maalepinde found for {nummer}.")
-        else:
-            continue
-
-#select_maalepinde()
-
-ml = get_milestone_stopwords(1595)
-#sw_test = get_milestone(16484)
-
-print("Results for fagnr 1595:")
-for m in ml:
-    print(m)
-
-#print("\nResults for fagnr 16484:")
-#for m in sw_test:
-#    print(m)
+    ml = get_measurement_points(df)
+    for point in ml:
+        print(point)

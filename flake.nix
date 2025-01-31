@@ -17,6 +17,7 @@
               pandas
               matplotlib
               openpyxl
+              nltk
             ]))
         ];
       };
