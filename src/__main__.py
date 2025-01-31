@@ -13,7 +13,8 @@ import matplotlib.pyplot as plt
 
 EXCEL_FILE = "data/Fagtabel_Excel_2024.xlsx"
 
-WORD_PATTERN = re.compile(r"[a-zA-ZæøåÆØÅ]+(?:'[a-zA-ZæøåÆØÅ]+)?")
+ALPHABET_PATTERN = r"[a-zA-ZæøåÆØÅ]"
+WORD_PATTERN = re.compile(rf"{ALPHABET_PATTERN}+(?:'{ALPHABET_PATTERN}+)?")
 
 nltk.download('stopwords', quiet=True)
 STOPWORDS = set(stopwords.words("danish"))
