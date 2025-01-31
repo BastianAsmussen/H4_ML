@@ -12,6 +12,10 @@ from wordcloud import WordCloud
 import matplotlib.pyplot as plt
 
 EXCEL_FILE = "data/Fagtabel_Excel_2024.xlsx"
+
+WORD_PATTERN = re.compile(r"[a-zA-ZæøåÆØÅ]+(?:'[a-zA-ZæøåÆØÅ]+)?")
+
+nltk.download('stopwords', quiet=True)
 STOPWORDS = set(stopwords.words("danish"))
 
 def sanitize_string(text: str) -> str:
@@ -24,7 +28,10 @@ def sanitize_string(text: str) -> str:
     Returns:
         str: The sanitized string.
     """
-    words = re.findall(r"[a-zA-ZæøåÆØÅ]+(?:'[a-zA-ZæøåÆØÅ]+)?", text.lower())
+    if not text:
+        return ""
+
+    words = WORD_PATTERN.findall(text.lower())
 
     return " ".join(w for w in words if w not in STOPWORDS)
 
@@ -103,7 +110,6 @@ def plot_word_frequencies(words: list[str], top_n: int = 30) -> None:
 def main() -> None:
     """Execute the main program flow."""
     try:
-        nltk.download("stopwords", quiet=True)
         df = pd.read_excel(EXCEL_FILE)
 
         # Process words.
