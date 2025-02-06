@@ -16,8 +16,22 @@ EXCEL_FILE = "data/Fagtabel_Excel_2024.xlsx"
 ALPHABET_PATTERN = r"[a-zA-ZæøåÆØÅ]"
 WORD_PATTERN = re.compile(rf"{ALPHABET_PATTERN}+(?:'{ALPHABET_PATTERN}+)?")
 
+STOPWORD_FILE = "data/stopwords.txt"
+
+def local_stopwords() -> list[str]:
+    """
+    Read the locally stored stopwords list (`STOPWORD_FILE`) into a list of strings.
+
+    Returns:
+        list[str]: A list of each line in the file, turned lowercase.
+    """
+    with open(STOPWORD_FILE, encoding="UTF-8") as file:
+        lines = file.readlines()
+
+    return [line.lower() for line in lines]
+
 nltk.download('stopwords', quiet=True)
-STOPWORDS = set(stopwords.words("danish"))
+STOPWORDS = set(stopwords.words("danish") + local_stopwords())
 
 def sanitize_string(text: str) -> str:
     """
@@ -111,23 +125,29 @@ def plot_word_frequencies(words: list[str], top_n: int = 30) -> None:
 def main() -> None:
     """Execute the main program flow."""
     try:
-        df = pd.read_excel(EXCEL_FILE)
-
-        # Process words.
-        sanitized_words = [
-            word
-            for point in get_measurement_points(df)
-            for word in sanitize_string(point).split()
+        sheets = [
+            "Datatekniker med speciale i pro",
+            "Datatekniker med speciale i inf",
+            "It-supporter"
         ]
+        dfs = [pd.read_excel(EXCEL_FILE, sheet_name=sheet) for sheet in sheets]
 
-        if not sanitized_words:
-            print("Warning: No words found after processing!", file=sys.stderr)
+        for df in dfs:
+            # Process words.
+            sanitized_words = [
+                word
+                for point in get_measurement_points(df)
+                for word in sanitize_string(point).split()
+            ]
 
-            return
+            if not sanitized_words:
+                print("Warning: No words found after processing!", file=sys.stderr)
 
-        # Generate visualizations.
-        generate_wordcloud(sanitized_words)
-        plot_word_frequencies(sanitized_words)
+                return
+
+            # Generate visualizations.
+            generate_wordcloud(sanitized_words)
+            plot_word_frequencies(sanitized_words)
 
     except Exception as e:
         print(f"An error occurred: {e}", file=sys.stderr)
