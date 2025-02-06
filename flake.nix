@@ -19,6 +19,9 @@
               openpyxl
               nltk
               wordcloud
+              scikit-learn
+              tensorflow
+              keras
             ]))
         ];
       };
