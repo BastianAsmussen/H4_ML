@@ -11,5 +11,6 @@ This project is built using [Nix](https://nixos.org).
 ```sh
 nix develop
 
-python -m src
+export PROJECT="1_visualization"
+python -m $PROJECT
 ```
