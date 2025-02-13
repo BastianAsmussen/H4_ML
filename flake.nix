@@ -22,6 +22,10 @@
               scikit-learn
               tensorflow
               keras
+              seaborn
+              imbalanced-learn
+              pillow
+              opencv-python
             ]))
         ];
       };
