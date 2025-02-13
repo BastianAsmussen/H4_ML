@@ -1,0 +1,10 @@
+[package]
+name = "rust-ml"
+version = "0.1.0"
+edition = "2021"
+description = ""
+authors = ["Bastian Asmussen <bastian@asmussen.tech>"]
+readme = "README.md"
+license-file = "LICNESE"
+
+[dependencies]
