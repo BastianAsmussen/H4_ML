@@ -27,6 +27,7 @@
               pillow
               opencv-python
               numpy
+              xgboost
             ]))
         ];
       };

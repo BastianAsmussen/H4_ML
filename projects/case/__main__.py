@@ -1,93 +1,127 @@
 import pandas as pd
-from pandas import DataFrame
-
-from sklearn.preprocessing import LabelEncoder
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score, classification_report
-
+import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-def get_dataset(path: str) -> DataFrame:
-    df = pd.read_csv(path)
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.metrics import (accuracy_score, precision_score, recall_score, f1_score,
+                             confusion_matrix, roc_auc_score, roc_curve, precision_recall_curve)
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from imblearn.pipeline import Pipeline  # Note: imblearn's Pipeline to support SMOTE
+from imblearn.over_sampling import SMOTE
+from xgboost import XGBClassifier
 
-    # Fix missing values.
-    df.dropna(subset=["title", "type", "duration"], inplace=True)
-    df.loc[:, "country"] = df["country"].fillna("Unknown")
-    df.loc[:, "listed_in"] = df["listed_in"].fillna("Unknown")
+# -------------------------
+# Data Loading & Cleaning
+# -------------------------
+df = pd.read_csv("data/Telco_Customer_Churn.csv")
+df['TotalCharges'] = pd.to_numeric(df['TotalCharges'], errors='coerce')
+df = df.dropna(subset=['TotalCharges'])
+df = df.drop('customerID', axis=1)
 
-    df["duration"] = df["duration"].apply(lambda x: x.split(" ")[0] if "min" in x else None)
-    df.dropna(subset=["duration"], inplace=True)
-    df["duration"] = df["duration"].astype(int)
+# -------------------------
+# Define Features and Target
+# -------------------------
+target = 'Churn'
+X = df.drop(target, axis=1)
+y = df[target].apply(lambda x: 1 if x == 'Yes' else 0)
 
-    return df
+# Identify numeric and categorical features
+numeric_features = ['tenure', 'MonthlyCharges', 'TotalCharges']
+categorical_features = [col for col in X.columns if col not in numeric_features]
 
-def predict_length(df: DataFrame, genre: str) -> int:
-    X = df[["duration"]]
-    y = df["listed_in"]
+# -------------------------
+# Preprocessing Pipeline
+# -------------------------
+preprocessor = ColumnTransformer(
+    transformers=[
+        ('num', StandardScaler(), numeric_features),
+        ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_features)
+    ])
 
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+# -------------------------
+# Build Model Pipeline
+# -------------------------
+# We include SMOTE to balance the classes and use XGBoost as our classifier.
+pipeline = Pipeline(steps=[
+    ('preprocessor', preprocessor),
+    ('smote', SMOTE(random_state=42)),
+    ('classifier', XGBClassifier(use_label_encoder=False, eval_metric='logloss', random_state=42))
+])
 
-    model = RandomForestClassifier()
-    model.fit(X_train, y_train)
+# -------------------------
+# Hyperparameter Tuning with GridSearchCV
+# -------------------------
+param_grid = {
+    'classifier__n_estimators': [100, 200],
+    'classifier__max_depth': [5, 10],
+    'classifier__learning_rate': [0.05, 0.1]
+}
 
-    y_pred = model.predict(X_test)
+grid_search = GridSearchCV(pipeline, param_grid, cv=5, scoring='roc_auc', n_jobs=-1, verbose=1)
 
-    accuracy = accuracy_score(y_test, y_pred)
+# Split data into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+grid_search.fit(X_train, y_train)
 
-    print(f"Model Accuracy: {accuracy * 100:.2f}%")
-    print("Classification Report:")
-    print(classification_report(y_test, y_pred))
+print("Best Parameters:", grid_search.best_params_)
+print("Best CV ROC-AUC:", grid_search.best_score_)
 
-    plt.figure(figsize=(10, 6))
-    sns.barplot(x=model.feature_importances_, y=X.columns)
-    plt.title("Feature Importance")
-    plt.show()
+# Use the best model from grid search
+best_model = grid_search.best_estimator_
+y_pred_prob = best_model.predict_proba(X_test)[:, 1]
 
-    return y_pred
+# -------------------------
+# Adjust the Decision Threshold
+# -------------------------
+precision, recall, thresholds = precision_recall_curve(y_test, y_pred_prob)
+# Find threshold that maximizes F1 score
+f1_scores = 2 * precision * recall / (precision + recall + 1e-6)
+best_thresh = thresholds[np.argmax(f1_scores)]
+print("Optimal Threshold:", best_thresh)
 
-def analyze_hypotheses(df: DataFrame):
-    # Hypothesis 1: Films have become longer over the years.
-    movies = df.copy()
+# Apply the optimal threshold
+y_pred_adjusted = (y_pred_prob >= best_thresh).astype(int)
 
-    plt.figure(figsize=(12, 6))
-    sns.lineplot(data=movies, x="release_year", y="duration", errorbar=None)
-    plt.title("Trend of Movie Duration Over the Years")
-    plt.xlabel("Release Year")
-    plt.ylabel("Duration (minutes)")
-    plt.xticks(fontsize=10, rotation=45)
-    plt.tight_layout()
-    plt.show()
+# -------------------------
+# Model Evaluation Metrics
+# -------------------------
+accuracy = accuracy_score(y_test, y_pred_adjusted)
+precision_val = precision_score(y_test, y_pred_adjusted)
+recall_val = recall_score(y_test, y_pred_adjusted)
+f1 = f1_score(y_test, y_pred_adjusted)
+roc_auc = roc_auc_score(y_test, y_pred_prob)
 
-    # Hypothesis 2: More films have been produced in the USA over the years.
-    usa_movies = movies[movies["country"].str.contains("United States")]
+print("Adjusted Accuracy: {:.2f}".format(accuracy))
+print("Adjusted Precision: {:.2f}".format(precision_val))
+print("Adjusted Recall: {:.2f}".format(recall_val))
+print("Adjusted F1 Score: {:.2f}".format(f1))
+print("ROC-AUC: {:.2f}".format(roc_auc))
 
-    plt.figure(figsize=(12, 6))
-    sns.countplot(data=usa_movies, x="release_year",
-                  order=usa_movies["release_year"].value_counts().index)
-    plt.title("Number of Films Produced in the USA Over the Years")
-    plt.xlabel("Release Year")
-    plt.ylabel("Number of Films")
-    plt.xticks(fontsize=10, rotation=45)
-    plt.tight_layout()
-    plt.show()
+# -------------------------
+# Visualization: Confusion Matrix
+# -------------------------
+cm = confusion_matrix(y_test, y_pred_adjusted)
+plt.figure(figsize=(6, 4))
+sns.heatmap(cm, annot=True, fmt='d', cmap="Blues")
+plt.title("Confusion Matrix - XGBoost with SMOTE")
+plt.xlabel("Predicted")
+plt.ylabel("Actual")
+plt.savefig("xgb_confusion_matrix.png", bbox_inches='tight')
+plt.show()
 
-    # Hypothesis 3: Longer titles often indicate a series.
-    df["title_length"] = df["title"].apply(len)
+# -------------------------
+# Visualization: ROC Curve
+# -------------------------
+fpr, tpr, _ = roc_curve(y_test, y_pred_prob)
+plt.figure(figsize=(6, 4))
+plt.plot(fpr, tpr, label='ROC Curve (area = {:.2f})'.format(roc_auc))
+plt.plot([0, 1], [0, 1], '--', color='gray')
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate")
+plt.title("ROC Curve - XGBoost with SMOTE")
+plt.legend(loc="lower right")
+plt.savefig("xgb_roc_curve.png", bbox_inches='tight')
+plt.show()
 
-    plt.figure(figsize=(12, 6))
-    sns.boxplot(data=df, x="type", y="title_length")
-    plt.title("Title Length by Type")
-    plt.xlabel("Type")
-    plt.ylabel("Title Length")
-    plt.show()
-
-def main():
-    df = get_dataset("data/netflix_titles.csv")
-
-    # analyze_hypotheses(df)
-    predict_length(df, "Drama")
-
-if __name__ == "__main__":
-    main()
