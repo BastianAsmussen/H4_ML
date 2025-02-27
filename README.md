@@ -21,3 +21,8 @@ nix flake check --all-systems
 ```sh
 nix run
 ```
+
+## Case Opgave
+
+- Find selv passende datasæt / algoritme.
+- Skal afleveres med minimal beskrivelse (PowerPoint).

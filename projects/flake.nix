@@ -26,6 +26,7 @@
               imbalanced-learn
               pillow
               opencv-python
+              numpy
             ]))
         ];
       };
